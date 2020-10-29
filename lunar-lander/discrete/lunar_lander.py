@@ -28,40 +28,29 @@ np.random.seed(0)
 
 class DQN:
 
-    """ Implementation of deep q learning algorithm """
+    """ Implementation of Deep Q-Learning algorithm """
 
-    def __init__(self, action_space, state_space):
-        self.action_space = action_space
-        self.state_space = state_space
+    def __init__(self, env):
         self.epsilon = 1.0
         self.gamma = .99
         self.batch_size = 64
         self.epsilon_min = .01
         self.lr = 0.001
         # self.epsilon_decay = .996
+
+        self.env = env
+        self.action_space = self.env.action_space.n
+        self.state_space = self.env.observation_space.shape[0]
+        self.max_steps = self.env._max_episode_steps   #1000 in LunarLander
         self.memory = deque(maxlen=1000000)
         self.model = self.build_model()
 
-    def build_model(self):
-
-        model = Sequential()
-        model.add(Dense(150, input_dim=self.state_space, activation=relu))
-        model.add(Dense(120, activation=relu))
-        model.add(Dense(self.action_space, activation=linear))
-        model.compile(loss='mse', optimizer=Adam(lr=self.lr))
-        return model
-
     def remember(self, state, action, reward, next_state, done):
+        """  """
         self.memory.append((state, action, reward, next_state, done))
 
-    def act(self, state):
-        if np.random.rand() <= self.epsilon:
-            return np.random.randint(self.action_space)  # Exploration
-        act_values = self.model.predict(state)
-        return np.argmax(act_values[0])  # Exploitation
-
     def replay(self):
-
+        """  """
         if len(self.memory) < self.batch_size:
             return
 
@@ -84,32 +73,26 @@ class DQN:
         # if self.epsilon > self.epsilon_min:
         #     self.epsilon *= self.epsilon_decay
 
-    def save_weights(self, weights_fn='model_weights.h5'):
-        self.model.save_weights(weights_fn)
-        print(f'Model weights saved to : {weights_fn}')
+    def act(self, state):
+        if np.random.rand() <= self.epsilon:
+            return np.random.randint(self.action_space)  # Exploration
+        act_values = self.model.predict(state)
+        return np.argmax(act_values[0])  # Exploitation
 
-    def load_weights(self, weights_fn):
-        if weights_fn is not None:
-            if os.path.isfile(weights_fn):
-                self.model.load_weights(weights_fn)
-            else:
-                raise ValueError(f'Invalid file name specified: {weights_fn}')
-
-    def train(self, env, episodes):
+    def train(self, episodes):
         rewards = []
         for e in range(episodes):
             self.epsilon = self.decay_function(e, episodes)
 
             print(f'epsilon: {self.epsilon}')
 
-            state = env.reset()
+            state = self.env.reset()
             state = state.reshape(1, 8)
             total_reward = 0
-            max_steps = env._max_episode_steps   #1000 in LunarLander
-            for i in range(max_steps):
+            for step in range(self.max_steps):
                 action = self.act(state)
-                # env.render()
-                next_state, reward, done, _ = env.step(action)
+                # self.env.render()
+                next_state, reward, done, _ = self.env.step(action)
                 total_reward += reward
                 next_state = next_state.reshape(1, 8)
                 self.remember(state, action, reward, next_state, done)
@@ -135,15 +118,16 @@ class DQN:
 
         return rewards
 
-    def evaluate(self, env, episodes=1):
+    def evaluate(self, episodes=1):
+        done = False
         for e in range(episodes):
-            state = env.reset()
+            state = self.env.reset()
             state = state.reshape(1, 8)
             score = 0
             while not done:
-                env.render()
+                self.env.render()
                 action = self.act(state)
-                next_state, reward, done, _ = env.step(action)
+                next_state, reward, done, _ = self.env.step(action)
                 score += reward
                 next_state = next_state.reshape(1, 8)
                 state = next_state
@@ -152,22 +136,46 @@ class DQN:
     def decay_function(self, episode, total_episodes):
         return max(self.epsilon_min, min(1.0, 1.0 - np.log10((episode + 1) / (total_episodes * 0.1))))
 
+    def build_model(self):
+
+        model = Sequential()
+        model.add(Dense(150, input_dim=self.state_space, activation=relu))
+        model.add(Dense(120, activation=relu))
+        model.add(Dense(self.action_space, activation=linear))
+        model.compile(loss='mse', optimizer=Adam(lr=self.lr))
+        return model
+
+    def save_weights(self, weights_fn='model_weights.h5'):
+        self.model.save_weights(weights_fn)
+        print(f'Model weights saved to : {weights_fn}')
+
+    def load_weights(self, weights_fn):
+        if weights_fn is not None:
+            if os.path.isfile(weights_fn):
+                self.model.load_weights(weights_fn)
+            else:
+                raise ValueError(f'Invalid file name specified: {weights_fn}')
+
+
+def create_env():
+        return gym.make('LunarLander-v2')
+
 
 if __name__ == '__main__':
-    # WEIGHTS = r'dqn_e50.h5'
+    env = create_env()
 
-    print(env.observation_space)
-    print(env.action_space)
-
-    agent = DQN(env.action_space.n, env.observation_space.shape[0])
-    episodes = 400
-    loss = agent.train(env, episodes)
+    # agent = DQN(env)
+    # episodes = 400
+    agent = DQN(env)
+    agent.load_weights('dqn_e150.h5')
+    episodes = 250
+    loss = agent.train(episodes)
     plt.plot(np.arange(1, len(loss)+1, 2), loss[::2])
     plt.show()
 
-    agent.evaluate(env)
+    agent.evaluate()
 
 
 # TODO:
+#   - Add comments for important steps. Match with theory, decks.
 #   - Replace reshape() with flat array indexing
-#   - 
