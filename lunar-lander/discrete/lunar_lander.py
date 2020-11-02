@@ -35,6 +35,7 @@ class DQN:
         self.gamma = .99
         self.batch_size = 64
         self.epsilon_min = .01
+        self.epsilon_max = 1.0
         self.lr = 0.001
         # self.epsilon_decay = .996
 
@@ -76,8 +77,8 @@ class DQN:
     def act(self, state):
         if np.random.rand() <= self.epsilon:
             return np.random.randint(self.action_space)  # Exploration
-        act_values = self.model.predict(state)
-        return np.argmax(act_values[0])  # Exploitation
+        act_values = np.squeeze(self.model.predict(state))
+        return np.argmax(act_values)  # Exploitation
 
     def train(self, episodes):
         rewards = []
@@ -119,8 +120,10 @@ class DQN:
         return rewards
 
     def evaluate(self, episodes=1):
-        done = False
+        curr_epsilon = self.epsilon
+        self.epsilon = 0.0
         for e in range(episodes):
+            done = False
             state = self.env.reset()
             state = state.reshape(1, 8)
             score = 0
@@ -132,9 +135,10 @@ class DQN:
                 next_state = next_state.reshape(1, 8)
                 state = next_state
             print("episode: {}/{}, score: {}".format(e, episodes, score))
+        self.epsilon = curr_epsilon
 
     def decay_function(self, episode, total_episodes):
-        return max(self.epsilon_min, min(1.0, 1.0 - np.log10((episode + 1) / (total_episodes * 0.1))))
+        return np.clip(1.0 - np.log10((episode + 1) / (total_episodes * 0.1)), self.epsilon_min, self.epsilon_max)
 
     def build_model(self):
 
@@ -164,16 +168,14 @@ def create_env():
 if __name__ == '__main__':
     env = create_env()
 
-    # agent = DQN(env)
-    # episodes = 400
     agent = DQN(env)
-    agent.load_weights('dqn_e150.h5')
-    episodes = 250
+    episodes = 400
     loss = agent.train(episodes)
     plt.plot(np.arange(1, len(loss)+1, 2), loss[::2])
     plt.show()
 
-    agent.evaluate()
+    # agent.load_weights('dqn_e200.h5')
+    agent.evaluate(5)
 
 
 # TODO:

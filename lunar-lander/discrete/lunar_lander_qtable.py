@@ -31,6 +31,7 @@ class QTable:
         self.epsilon = 1.0
         self.gamma = .99
         self.epsilon_min = .01
+        self.epsilon_max = 1.0
         self.lr = 0.001
         # self.epsilon_decay = .996
 
@@ -49,7 +50,7 @@ class QTable:
     def act(self, state):
         if np.random.rand() <= self.epsilon:
             return np.random.randint(self.action_space)  # Exploration
-        return np.argmax(self.q_table(state))  # Exploitation
+        return np.argmax(self.q_table[state])  # Exploitation
 
     def update_table(self, trajectory):
         """ Update the Q-table values starting from the terminal state """
@@ -97,8 +98,10 @@ class QTable:
             return rewards
 
     def evaluate(self, episodes=1):
-        done = False
+        curr_epsilon = self.epsilon
+        self.epsilon = 0.0
         for e in range(episodes):
+            done = False
             state = self._bucketize(self.env.reset())
             score = 0.0
             while not done:
@@ -109,9 +112,10 @@ class QTable:
                 score += reward
                 state = next_state
             print("episode: {}/{}, score: {}".format(e, episodes, score))
+        self.epsilon = curr_epsilon
 
     def decay_function(self, episode, total_episodes):
-        return max(self.epsilon_min, min(1.0, 1.0 - np.log10((episode + 1) / (total_episodes * 0.1))))
+        return np.clip(1.0 - np.log10((episode + 1) / (total_episodes * 0.1)), self.epsilon_min, self.epsilon_max)
 
     def save_qtable(self, q_table_fn='qtbl.npy'):
         np.save(q_table_fn, self.q_table)
@@ -121,6 +125,8 @@ class QTable:
         if q_table_fn is not None:
             if os.path.isfile(q_table_fn):
                 self.q_table = np.load(q_table_fn)
+                if len(self.q_table.shape) == 10:
+                    self.q_table = self.q_table[0]
             else:
                 raise ValueError(f'Invalid file name specified: {q_table_fn}')
 
@@ -169,13 +175,13 @@ if __name__ == '__main__':
     env = create_env()
 
     agent = QTable(env)
-    episodes = 10000
-    loss = agent.train(episodes)
-    plt.plot(np.arange(1, len(loss)+1, 2), loss[::2])
-    plt.show()
+    # episodes = 10000
+    # loss = agent.train(episodes)
+    # plt.plot(np.arange(1, len(loss)+1, 2), loss[::2])
+    # plt.show()
 
-    # agent.load_qtable('qtbl_e350.npy')
-    agent.evaluate()
+    agent.load_qtable('qtbl_e10000.npy')
+    agent.evaluate(5)
 
 
 # TODO:
