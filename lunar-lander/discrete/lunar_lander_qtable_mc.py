@@ -172,6 +172,14 @@ class QTableMC:
             
         return tuple(bucket_indexes)
 
+    @property
+    def qtbl_2d(self):
+        """ Transform original Q-table into 2D [n_states, n_actions] """
+        n_actions = self.n_actions
+        n_states = np.prod(self.n_buckets)
+        qtbl_2d = self.q_table.copy().reshape(n_states, n_actions)
+        
+        return qtbl_2d
 
 def create_env():
     return gym.make('LunarLander-v2')
@@ -181,8 +189,8 @@ if __name__ == '__main__':
     env = create_env()
     agent = QTableMC(env)
     episodes = 20000
-    loss = agent.train(episodes)
-    np.save(f'qtbl_mc_loss_{episodes}.npy', np.asarray(loss))
+    reward = agent.train(episodes)
+    np.save(f'qtbl_mc_reward_{episodes}.npy', np.asarray(reward))
     
 #     agent.load_qtable('qtbl_e10000.npy')
 #     agent.evaluate(5)

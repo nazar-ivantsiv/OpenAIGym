@@ -57,9 +57,9 @@ class QTable:
     def train(self, episodes):
             rewards = []
             for e in range(episodes):
-#                 self.epsilon = self.decay_function(e, episodes)
-                if self.epsilon > self.epsilon_min:
-                    self.epsilon *= self.epsilon_decay
+                self.epsilon = self.decay_function(e, episodes)
+#                 if self.epsilon > self.epsilon_min:
+#                     self.epsilon *= self.epsilon_decay
                 state = self._bucketize(self.env.reset())
                 total_reward = 0
                 for step in range(self.max_steps):
@@ -81,7 +81,7 @@ class QTable:
                     print('\n Task Completed! \n')
                     self.save_qtable(f'qtbl_e{e}.h5')
                     break
-                if not e % 50:
+                if not e % 500:
                     print(f'[{e}/{episodes}] Average over last 100 episodes: {avg_reward:.2f}')
                     print(f'epsilon={self.epsilon:.4f}')
 
@@ -122,7 +122,6 @@ class QTable:
         print(f'Q-table saved to : {os.path.join(folder, q_table_fn)}')
 
     def load_qtable(self, q_table_fn):
-        q_table_fn = os.path.join(folder, q_table_fn)
         if q_table_fn is not None:
             if os.path.isfile(q_table_fn):
                 self.q_table = np.load(q_table_fn)
@@ -154,19 +153,28 @@ class QTable:
         # TODO: Refactor for performance
         bucket_indexes = []
         for i in range(len(state)):
+            n = self.n_buckets[i] - 1
             if state[i] <= self.state_bounds[i][0]:
                 bucket_index = 0
             elif state[i] >= self.state_bounds[i][1]:
-                bucket_index = self.n_buckets[i] - 1
+                bucket_index = n
             else:
                 bound_width = self.state_bounds[i][1] - self.state_bounds[i][0]
-                offset = (self.n_buckets[i]-1) * self.state_bounds[i][0]/bound_width
-                scaling = (self.n_buckets[i]-1) / bound_width
-                bucket_index = int(round(scaling*state[i] - offset))
+                offset = n * self.state_bounds[i][0] / bound_width
+                scaling = n / bound_width
+                bucket_index = int(round(scaling * state[i] - offset))
             bucket_indexes.append(bucket_index)
             
         return tuple(bucket_indexes)
 
+    @property
+    def qtbl_2d(self):
+        """ Transform original Q-table into 2D [n_states, n_actions] """
+        n_actions = self.n_actions
+        n_states = np.prod(self.n_buckets)
+        qtbl_2d = self.q_table.copy().reshape(n_states, n_actions)
+        
+        return qtbl_2d
 
 def create_env():
     return gym.make('LunarLander-v2')
@@ -176,8 +184,14 @@ if __name__ == '__main__':
     env = create_env()
     agent = QTable(env)
     episodes = 20000
-    loss = agent.train(episodes)
-    np.save(f'qtbl_td_loss_{episodes}.npy', np.asarray(loss))
+    reward = agent.train(episodes)
+    np.save(f'qtbl_td_reward_{episodes}.npy', np.asarray(reward))
+
+#     agent = QTable(env)
+#     episodes = 21001
+#     reward = agent.train(episodes)
+#     np.save(f'qtbl_td_reward_{episodes}.npy', np.asarray(reward))
+
     
 #     agent.load_qtable('qtbl_e10000.npy')
 #     agent.evaluate(5)

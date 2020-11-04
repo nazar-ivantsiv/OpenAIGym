@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 import sys, gym, time
-from lunar_lander_qtable import create_env
+from lunar_lander_qtable_td import create_env
 
 #
 # Test yourself as a learning agent! Pass environment name as a command-line argument, for example:

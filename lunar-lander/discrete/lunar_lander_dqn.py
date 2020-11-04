@@ -22,15 +22,13 @@ from keras.activations import relu, linear
 import os
 import numpy as np
 env = gym.make('LunarLander-v2')
-env.seed(0)
-np.random.seed(0)
 
 
 class DQN:
 
     """ Implementation of Deep Q-Learning algorithm """
 
-    def __init__(self, env, lr=0.001, gamma=.99, epsilon=1.0, epsilon_min=.01, epsilon_max=1.0, epsilon_decay=0.996, batch_size=64):
+    def __init__(self, env, lr=0.001, gamma=.99, epsilon=1.0, epsilon_min=.01, epsilon_max=1.0, epsilon_decay=0.996, batch_size=64, seed=0):
         self.epsilon = epsilon
         self.gamma = gamma
         self.batch_size = batch_size
@@ -40,6 +38,8 @@ class DQN:
         self.epsilon_decay = epsilon_decay
 
         self.env = env
+        self.env.seed(seed)
+        np.random.seed(seed)
         self.action_space = self.env.action_space.n
         self.state_space = self.env.observation_space.shape[0]
         self.max_steps = self.env._max_episode_steps   #1000 in LunarLander
@@ -176,8 +176,8 @@ if __name__ == '__main__':
     agent = DQN(env, lr=0.0001, epsilon=0.1, epsilon_max=0.1)
     agent.load_weights('checkpoints/dqn_e350.h5')
     episodes = 800
-    loss = agent.train(episodes)
-    np.save(f'dqn_loss_{episodes}.npy', np.asarray(loss))
+    reward = agent.train(episodes)
+    np.save(f'dqn_reward_{episodes}.npy', np.asarray(reward))
 
 
     

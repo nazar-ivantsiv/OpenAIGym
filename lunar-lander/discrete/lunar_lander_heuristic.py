@@ -1,6 +1,6 @@
 # source: https://github.com/openai/gym/blob/master/gym/envs/box2d/lunar_lander.py
 import numpy as np
-from lunar_lander_qtable import create_env
+from lunar_lander_qtable_td import create_env
 
 def heuristic(env, s):
     """
