@@ -30,14 +30,14 @@ class DQN:
 
     """ Implementation of Deep Q-Learning algorithm """
 
-    def __init__(self, env):
-        self.epsilon = 1.0
-        self.gamma = .99
-        self.batch_size = 64
-        self.epsilon_min = .01
-        self.epsilon_max = 1.0
-        self.lr = 0.001
-        # self.epsilon_decay = .996
+    def __init__(self, env, lr=0.001, gamma=.99, epsilon=1.0, epsilon_min=.01, epsilon_max=1.0, epsilon_decay=0.996, batch_size=64):
+        self.epsilon = epsilon
+        self.gamma = gamma
+        self.batch_size = batch_size
+        self.epsilon_min = epsilon_min
+        self.epsilon_max = epsilon_max
+        self.lr = lr
+        self.epsilon_decay = epsilon_decay
 
         self.env = env
         self.action_space = self.env.action_space.n
@@ -47,11 +47,9 @@ class DQN:
         self.model = self.build_model()
 
     def remember(self, state, action, reward, next_state, done):
-        """  """
         self.memory.append((state, action, reward, next_state, done))
 
     def replay(self):
-        """  """
         if len(self.memory) < self.batch_size:
             return
 
@@ -65,7 +63,7 @@ class DQN:
         states = np.squeeze(states)
         next_states = np.squeeze(next_states)
 
-        targets = rewards + self.gamma*(np.amax(self.model.predict_on_batch(next_states), axis=1))*(1-dones)
+        targets = rewards + self.gamma * (np.amax(self.model.predict_on_batch(next_states), axis=1)) * (1 - dones)
         targets_full = self.model.predict_on_batch(states)
         ind = np.arange(self.batch_size)
         targets_full[[ind], [actions]] = targets
@@ -84,9 +82,6 @@ class DQN:
         rewards = []
         for e in range(episodes):
             self.epsilon = self.decay_function(e, episodes)
-
-            print(f'epsilon: {self.epsilon}')
-
             state = self.env.reset()
             state = state.reshape(1, 8)
             total_reward = 0
@@ -100,7 +95,7 @@ class DQN:
                 self.replay()
                 state = next_state
                 if done:
-                    print("episode: {}/{}, total_reward: {}".format(e, episodes, total_reward))
+                    print(f'episode: {e}/{episodes}, total_reward: {total_reward}')
                     break
             rewards.append(total_reward)
 
@@ -111,7 +106,8 @@ class DQN:
                 print('\n Task Completed! \n')
                 self.save_weights(f'dqn_e{e}.h5')
                 break
-            print("Average over last 100 episode: {0:.2f} \n".format(avg_reward))
+            print(f'[{e}/{episodes}] Average over last 100 episodes: {avg_reward:.2f}')
+            print(f'epsilon={self.epsilon:.4f}')
 
             # Save intermediate model weights every N episodes
             if not (e % 50) and e:
@@ -134,7 +130,7 @@ class DQN:
                 score += reward
                 next_state = next_state.reshape(1, 8)
                 state = next_state
-            print("episode: {}/{}, score: {}".format(e, episodes, score))
+            print(f'episode: {e}/{episodes}, score: {score}')
         self.epsilon = curr_epsilon
 
     def decay_function(self, episode, total_episodes):
@@ -150,8 +146,11 @@ class DQN:
         return model
 
     def save_weights(self, weights_fn='model_weights.h5'):
-        self.model.save_weights(weights_fn)
-        print(f'Model weights saved to : {weights_fn}')
+        folder = 'checkpoints'
+        if not os.path.exists(folder):
+            os.mkdir(folder)
+        self.model.save_weights(os.path.join(folder, weights_fn))
+        print(f'Model weights saved to : {os.path.join(folder, weights_fn)}')
 
     def load_weights(self, weights_fn):
         if weights_fn is not None:
@@ -167,17 +166,20 @@ def create_env():
 
 if __name__ == '__main__':
     env = create_env()
+    
+#     agent = DQN(env)
+#     episodes = 800
+#     loss = agent.train(episodes)
+#     np.save(f'dqn_loss_{episodes}.npy', np.asarray(loss))
 
-    agent = DQN(env)
-    episodes = 400
+    # Resume training
+    agent = DQN(env, lr=0.0001, epsilon=0.1, epsilon_max=0.1)
+    agent.load_weights('checkpoints/dqn_e350.h5')
+    episodes = 800
     loss = agent.train(episodes)
-    plt.plot(np.arange(1, len(loss)+1, 2), loss[::2])
-    plt.show()
+    np.save(f'dqn_loss_{episodes}.npy', np.asarray(loss))
 
+
+    
     # agent.load_weights('dqn_e200.h5')
-    agent.evaluate(5)
-
-
-# TODO:
-#   - Add comments for important steps. Match with theory, decks.
-#   - Replace reshape() with flat array indexing
+#     agent.evaluate(5)

@@ -12,12 +12,7 @@
 
 import gym
 import random
-from keras import Sequential
-from collections import deque
-from keras.layers import Dense
-from keras.optimizers import Adam
 import matplotlib.pyplot as plt
-from keras.activations import relu, linear
 
 import os
 import numpy as np
@@ -25,19 +20,19 @@ import numpy as np
 
 class QTable:
 
-    """ Implementation of Q-Table algorithm """
+    """ Implementation of tabular Q-learning algorithm. Temporal Differenct update. """
 
-    def __init__(self, env):
-        self.epsilon = 1.0
-        self.gamma = .99
-        self.epsilon_min = .01
-        self.epsilon_max = 1.0
-        self.lr = 0.001
-        # self.epsilon_decay = .996
-
+    def __init__(self, env, alpha=0.1, gamma=.9, epsilon=1.0, epsilon_min=.01, epsilon_max=1.0, epsilon_decay=0.996, seed=0):
+        self.epsilon = epsilon
+        self.alpha = alpha  # Learning rate (TD only)
+        self.gamma = gamma
+        self.epsilon_min = epsilon_min
+        self.epsilon_max = epsilon_max
+        self.epsilon_decay = epsilon_decay
+        
         self.env = env
-        self.env.seed(0)
-        np.random.seed(0)
+        self.env.seed(seed)
+        np.random.seed(seed)
         self.action_space = self.env.action_space.n
         self.max_steps = self.env._max_episode_steps   #1000 in LunarLander
         n_buckets, n_actions, state_bounds = self._init_buckets_and_actions()
@@ -48,38 +43,35 @@ class QTable:
         self.visits_counter = np.zeros(n_buckets + (n_actions,))
 
     def act(self, state):
+        """ e-greedy policy """
         if np.random.rand() <= self.epsilon:
             return np.random.randint(self.action_space)  # Exploration
         return np.argmax(self.q_table[state])  # Exploitation
 
-    def update_table(self, trajectory):
-        """ Update the Q-table values starting from the terminal state """
-        g = 0.0
-        for t in reversed(range(len(trajectory))):
-            s_t, a_t, r_t = trajectory[t]
-            g = self.gamma * g + r_t
-            if not [s_t, a_t] in [[x[0], x[1]] for x in trajectory[0:t]]:
-                self.visits_counter[s_t][a_t] += 1
-                self.q_table[s_t][a_t] += (g - self.q_table[s_t][a_t]) / self.visits_counter[s_t][a_t]
+    def update_td(self, state, action, reward, new_state):
+        """ TD(0) Temporal Difference update for a single transition (step) """
+        old_value = self.q_table[state][action]
+        new_value = (1 - self.alpha) * old_value + self.alpha * (reward + self.gamma * np.max(self.q_table[new_state]))
+        self.q_table[state][action] = new_value
 
     def train(self, episodes):
             rewards = []
             for e in range(episodes):
-                trajectory = []
+#                 self.epsilon = self.decay_function(e, episodes)
+                if self.epsilon > self.epsilon_min:
+                    self.epsilon *= self.epsilon_decay
                 state = self._bucketize(self.env.reset())
                 total_reward = 0
                 for step in range(self.max_steps):
-                    # self.env.render()
                     action = self.act(state)
                     new_state, reward, done, _ = self.env.step(action)
                     total_reward += reward
                     new_state = self._bucketize(new_state)
-                    trajectory.append([state, action, reward])
+                    self.update_td(state, action, reward, new_state)
                     state = new_state
                     if done:
-                        print("episode: {}/{}, total_reward: {}".format(e, episodes, total_reward))
+#                         print(f'episode: {e}/{episodes}, total_reward: {total_reward}')
                         break
-                self.update_table(trajectory)
                 rewards.append(total_reward)
 
                 # Average score of last 100 episode
@@ -89,15 +81,19 @@ class QTable:
                     print('\n Task Completed! \n')
                     self.save_qtable(f'qtbl_e{e}.h5')
                     break
-                print("Average over last 100 episode: {0:.2f} \n".format(avg_reward))
+                if not e % 50:
+                    print(f'[{e}/{episodes}] Average over last 100 episodes: {avg_reward:.2f}')
+                    print(f'epsilon={self.epsilon:.4f}')
 
                 # Save intermediate q-table every N episodes
-                if not (e % 50) and e:
-                    self.save_qtable(f'qtbl_e{e}.npy')
-
+                if not (e % 1000) and e:
+                    self.save_qtable(f'qtbl_td_e{e}.npy')
+            self.env.close()
+            
             return rewards
 
     def evaluate(self, episodes=1):
+#         self.env.seed(np.random.randint(1000))
         curr_epsilon = self.epsilon
         self.epsilon = 0.0
         for e in range(episodes):
@@ -111,17 +107,22 @@ class QTable:
                 next_state = self._bucketize(next_state)
                 score += reward
                 state = next_state
-            print("episode: {}/{}, score: {}".format(e, episodes, score))
+            print(f'episode: {e}/{episodes}, score: {score}')
         self.epsilon = curr_epsilon
+        self.env.close()
 
     def decay_function(self, episode, total_episodes):
         return np.clip(1.0 - np.log10((episode + 1) / (total_episodes * 0.1)), self.epsilon_min, self.epsilon_max)
 
-    def save_qtable(self, q_table_fn='qtbl.npy'):
-        np.save(q_table_fn, self.q_table)
-        print(f'Q-table saved to : {q_table_fn}')
+    def save_qtable(self, q_table_fn='qtbl_td.npy'):
+        folder = 'checkpoints'
+        if not os.path.exists(folder):
+            os.mkdir(folder)
+        np.save(os.path.join(folder, q_table_fn), self.q_table)
+        print(f'Q-table saved to : {os.path.join(folder, q_table_fn)}')
 
     def load_qtable(self, q_table_fn):
+        q_table_fn = os.path.join(folder, q_table_fn)
         if q_table_fn is not None:
             if os.path.isfile(q_table_fn):
                 self.q_table = np.load(q_table_fn)
@@ -138,14 +139,14 @@ class QTable:
         state_bounds = list(zip(self.env.observation_space.low, self.env.observation_space.high))
         
         # New bound values for each dimension
-        state_bounds[0] = [-1,1]      # position x
-        state_bounds[1] = [-1,1]      # position y
-        state_bounds[2] = [-1,1]      # vel x
-        state_bounds[3] = [-1,1]      # vel y
-        state_bounds[4] = [-1,1]      # angle
-        state_bounds[5] = [-1,1]      # angular vel
-        state_bounds[6] = [0,1]
-        state_bounds[7] = [0,1]
+        state_bounds[0] = [-1,1]  # x coordinate
+        state_bounds[1] = [-1,1]  # y coordinate
+        state_bounds[2] = [-1,1]  # x speed
+        state_bounds[3] = [-1,1]  # y speed
+        state_bounds[4] = [-1,1]  # angle
+        state_bounds[5] = [-1,1]  # angular speed
+        state_bounds[6] = [0,1]   # if first leg has contact
+        state_bounds[7] = [0,1]   # if second leg has contact
         
         return n_buckets, n_actions, state_bounds
 
@@ -173,17 +174,10 @@ def create_env():
 
 if __name__ == '__main__':
     env = create_env()
-
     agent = QTable(env)
-    # episodes = 10000
-    # loss = agent.train(episodes)
-    # plt.plot(np.arange(1, len(loss)+1, 2), loss[::2])
-    # plt.show()
-
-    agent.load_qtable('qtbl_e10000.npy')
-    agent.evaluate(5)
-
-
-# TODO:
-#   - Add comments for important steps. Match with theory, decks.
-#   - Standardize all 'format' strings
+    episodes = 20000
+    loss = agent.train(episodes)
+    np.save(f'qtbl_td_loss_{episodes}.npy', np.asarray(loss))
+    
+#     agent.load_qtable('qtbl_e10000.npy')
+#     agent.evaluate(5)
