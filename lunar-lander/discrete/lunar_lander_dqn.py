@@ -1,17 +1,7 @@
-# Landing pad is always at coordinates (0,0). Coordinates are the first
-# two numbers in state vector. Reward for moving from the top of the screen
-# to landing pad and zero speed is about 100..140 points. If lander moves
-# away from landing pad it loses reward back. Episode finishes if the lander
-# crashes or comes to rest, receiving additional -100 or +100 points.
-# Each leg ground contact is +10. Firing main engine is -0.3 points each frame.
-# Solved is 200 points. Landing outside landing pad is possible. Fuel is
-# infinite, so an agent can learn to fly and then land on its first attempt.
-# Four discrete actions available: do nothing, fire left orientation engine,
-# fire main engine, fire right orientation engine.
-
-
 import gym
 import random
+import warnings
+warnings.simplefilter(action='ignore', category=FutureWarning)  # To suppress TF warnings
 from keras import Sequential
 from collections import deque
 from keras.layers import Dense
@@ -28,13 +18,13 @@ class DQN:
 
     """ Implementation of Deep Q-Learning algorithm """
 
-    def __init__(self, env, lr=0.001, gamma=.99, epsilon=1.0, epsilon_min=.01, epsilon_max=1.0, epsilon_decay=0.996, batch_size=64, seed=0):
+    def __init__(self, env, alpha=0.001, gamma=.99, epsilon=1.0, epsilon_min=.01, epsilon_max=1.0, epsilon_decay=0.996, batch_size=64, seed=0):
         self.epsilon = epsilon
         self.gamma = gamma
         self.batch_size = batch_size
         self.epsilon_min = epsilon_min
         self.epsilon_max = epsilon_max
-        self.lr = lr
+        self.alpha = alpha
         self.epsilon_decay = epsilon_decay
 
         self.env = env
@@ -142,7 +132,7 @@ class DQN:
         model.add(Dense(150, input_dim=self.state_space, activation=relu))
         model.add(Dense(120, activation=relu))
         model.add(Dense(self.action_space, activation=linear))
-        model.compile(loss='mse', optimizer=Adam(lr=self.lr))
+        model.compile(loss='mse', optimizer=Adam(lr=self.alpha))
         return model
 
     def save_weights(self, weights_fn='model_weights.h5'):
@@ -167,19 +157,17 @@ def create_env():
 if __name__ == '__main__':
     env = create_env()
     
-#     agent = DQN(env)
-#     episodes = 800
-#     loss = agent.train(episodes)
-#     np.save(f'dqn_loss_{episodes}.npy', np.asarray(loss))
-
-    # Resume training
-    agent = DQN(env, lr=0.0001, epsilon=0.1, epsilon_max=0.1)
-    agent.load_weights('checkpoints/dqn_e350.h5')
-    episodes = 800
+    agent = DQN(env)
+    episodes = 600  # Should be enough to converge to optimal policy
     reward = agent.train(episodes)
     np.save(f'dqn_reward_{episodes}.npy', np.asarray(reward))
 
-
+#     # Resume training
+#     agent = DQN(env, lr=0.0001, epsilon=0.1, epsilon_max=0.1)
+#     agent.load_weights('checkpoints/dqn_e350.h5')
+#     episodes = 800
+#     reward = agent.train(episodes)
+#     np.save(f'dqn_reward_{episodes}.npy', np.asarray(reward))
     
     # agent.load_weights('dqn_e200.h5')
 #     agent.evaluate(5)

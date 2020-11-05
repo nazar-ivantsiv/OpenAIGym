@@ -1,15 +1,3 @@
-# Landing pad is always at coordinates (0,0). Coordinates are the first
-# two numbers in state vector. Reward for moving from the top of the screen
-# to landing pad and zero speed is about 100..140 points. If lander moves
-# away from landing pad it loses reward back. Episode finishes if the lander
-# crashes or comes to rest, receiving additional -100 or +100 points.
-# Each leg ground contact is +10. Firing main engine is -0.3 points each frame.
-# Solved is 200 points. Landing outside landing pad is possible. Fuel is
-# infinite, so an agent can learn to fly and then land on its first attempt.
-# Four discrete actions available: do nothing, fire left orientation engine,
-# fire main engine, fire right orientation engine.
-
-
 import gym
 import random
 import matplotlib.pyplot as plt
@@ -22,7 +10,7 @@ class QTable:
 
     """ Implementation of tabular Q-learning algorithm. Temporal Differenct update. """
 
-    def __init__(self, env, alpha=0.1, gamma=.9, epsilon=1.0, epsilon_min=.01, epsilon_max=1.0, epsilon_decay=0.996, seed=0):
+    def __init__(self, env, alpha=0.1, gamma=.99, epsilon=1.0, epsilon_min=.01, epsilon_max=1.0, epsilon_decay=0.996, seed=0):
         self.epsilon = epsilon
         self.alpha = alpha  # Learning rate (TD only)
         self.gamma = gamma
@@ -150,7 +138,6 @@ class QTable:
         return n_buckets, n_actions, state_bounds
 
     def _bucketize(self, state):
-        # TODO: Refactor for performance
         bucket_indexes = []
         for i in range(len(state)):
             n = self.n_buckets[i] - 1
