@@ -1,15 +1,3 @@
-# Landing pad is always at coordinates (0,0). Coordinates are the first
-# two numbers in state vector. Reward for moving from the top of the screen
-# to landing pad and zero speed is about 100..140 points. If lander moves
-# away from landing pad it loses reward back. Episode finishes if the lander
-# crashes or comes to rest, receiving additional -100 or +100 points.
-# Each leg ground contact is +10. Firing main engine is -0.3 points each frame.
-# Solved is 200 points. Landing outside landing pad is possible. Fuel is
-# infinite, so an agent can learn to fly and then land on its first attempt.
-# Four discrete actions available: do nothing, fire left orientation engine,
-# fire main engine, fire right orientation engine.
-
-
 import gym
 import random
 import matplotlib.pyplot as plt
@@ -87,7 +75,7 @@ class QTableMC:
                     print('\n Task Completed! \n')
                     self.save_qtable(f'qtbl_e{e}.h5')
                     break
-                if not e % 50:
+                if not e % 500:
                     print(f'[{e}/{episodes}] Average over last 100 episodes: {avg_reward:.2f}')
                     print(f'epsilon={self.epsilon:.4f}')
 
@@ -97,7 +85,7 @@ class QTableMC:
             self.env.close()
             
             return rewards
-        
+
     def evaluate(self, episodes=1):
 #         self.env.seed(np.random.randint(1000))
         curr_epsilon = self.epsilon
@@ -144,30 +132,30 @@ class QTableMC:
         state_bounds = list(zip(self.env.observation_space.low, self.env.observation_space.high))
         
         # New bound values for each dimension
-        state_bounds[0] = [-1,1]      # position x
-        state_bounds[1] = [-1,1]      # position y
-        state_bounds[2] = [-1,1]      # vel x
-        state_bounds[3] = [-1,1]      # vel y
-        state_bounds[4] = [-1,1]      # angle
-        state_bounds[5] = [-1,1]      # angular vel
-        state_bounds[6] = [0,1]
-        state_bounds[7] = [0,1]
+        state_bounds[0] = [-1,1]  # x coordinate
+        state_bounds[1] = [-1,1]  # y coordinate
+        state_bounds[2] = [-1,1]  # x speed
+        state_bounds[3] = [-1,1]  # y speed
+        state_bounds[4] = [-1,1]  # angle
+        state_bounds[5] = [-1,1]  # angular speed
+        state_bounds[6] = [0,1]   # if first leg has contact
+        state_bounds[7] = [0,1]   # if second leg has contact
         
         return n_buckets, n_actions, state_bounds
 
     def _bucketize(self, state):
-        # TODO: Refactor for performance
         bucket_indexes = []
         for i in range(len(state)):
+            n = self.n_buckets[i] - 1
             if state[i] <= self.state_bounds[i][0]:
                 bucket_index = 0
             elif state[i] >= self.state_bounds[i][1]:
-                bucket_index = self.n_buckets[i] - 1
+                bucket_index = n
             else:
                 bound_width = self.state_bounds[i][1] - self.state_bounds[i][0]
-                offset = (self.n_buckets[i]-1) * self.state_bounds[i][0]/bound_width
-                scaling = (self.n_buckets[i]-1) / bound_width
-                bucket_index = int(round(scaling*state[i] - offset))
+                offset = n * self.state_bounds[i][0] / bound_width
+                scaling = n / bound_width
+                bucket_index = int(round(scaling * state[i] - offset))
             bucket_indexes.append(bucket_index)
             
         return tuple(bucket_indexes)

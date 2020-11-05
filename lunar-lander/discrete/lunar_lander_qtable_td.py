@@ -174,11 +174,5 @@ if __name__ == '__main__':
     reward = agent.train(episodes)
     np.save(f'qtbl_td_reward_{episodes}.npy', np.asarray(reward))
 
-#     agent = QTable(env)
-#     episodes = 21001
-#     reward = agent.train(episodes)
-#     np.save(f'qtbl_td_reward_{episodes}.npy', np.asarray(reward))
-
-    
 #     agent.load_qtable('qtbl_e10000.npy')
 #     agent.evaluate(5)

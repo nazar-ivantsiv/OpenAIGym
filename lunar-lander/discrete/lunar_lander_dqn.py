@@ -158,16 +158,16 @@ if __name__ == '__main__':
     env = create_env()
     
     agent = DQN(env)
-    episodes = 600  # Should be enough to converge to optimal policy
+    episodes = 600  # Should be enough to satisfy env criterion (reward 200+)
     reward = agent.train(episodes)
     np.save(f'dqn_reward_{episodes}.npy', np.asarray(reward))
 
-#     # Resume training
-#     agent = DQN(env, lr=0.0001, epsilon=0.1, epsilon_max=0.1)
-#     agent.load_weights('checkpoints/dqn_e350.h5')
-#     episodes = 800
-#     reward = agent.train(episodes)
-#     np.save(f'dqn_reward_{episodes}.npy', np.asarray(reward))
+    # # Resume training
+    # agent = DQN(env, lr=0.0001, epsilon=0.1, epsilon_max=0.1)
+    # agent.load_weights('checkpoints/dqn_e350.h5')
+    # episodes = 800
+    # reward = agent.train(episodes)
+    # np.save(f'dqn_reward_{episodes}.npy', np.asarray(reward))
     
     # agent.load_weights('dqn_e200.h5')
-#     agent.evaluate(5)
+    # agent.evaluate(5)
