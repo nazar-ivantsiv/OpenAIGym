@@ -1,4 +1,5 @@
 import gym
+import time
 import random
 import matplotlib.pyplot as plt
 
@@ -32,12 +33,12 @@ class QTableMC:
 
     def act(self, state):
         """ e-greedy policy """
-        if np.random.rand() <= self.epsilon:
+        if np.random.rand() < self.epsilon:
             return np.random.randint(self.action_space)  # Exploration
         return np.argmax(self.q_table[state])  # Exploitation
 
     def update_mc(self, trajectory):
-        """ Incremental Monte-Carlo update for a single trajectory """
+        """ First-visit Monte-Carlo update for a single trajectory """
         g = 0.0
         for t in reversed(range(len(trajectory))):
             s_t, a_t, r_t = trajectory[t]
@@ -86,22 +87,26 @@ class QTableMC:
             
             return rewards
 
-    def evaluate(self, episodes=1):
+    def evaluate(self, episodes=1, render=False):
 #         self.env.seed(np.random.randint(1000))
         curr_epsilon = self.epsilon
         self.epsilon = 0.0
+        score_list = []
         for e in range(episodes):
             done = False
             state = self._bucketize(self.env.reset())
             score = 0.0
             while not done:
-                self.env.render()
+                if render:
+                    self.env.render()
                 action = self.act(state)
                 next_state, reward, done, _ = self.env.step(action)
                 next_state = self._bucketize(next_state)
                 score += reward
                 state = next_state
+            score_list.append(score)
             print(f'episode: {e}/{episodes}, score: {score}')
+        print(f'avg_score: {np.average(score_list)}; score_std: {np.std(score_list)}')
         self.epsilon = curr_epsilon
         self.env.close()
 
@@ -176,8 +181,10 @@ def create_env():
 if __name__ == '__main__':
     env = create_env()
     agent = QTableMC(env)
-    episodes = 20000
+    episodes = 30000  # 20000
+    t0 = time.perf_counter()
     reward = agent.train(episodes)
+    print(f'elapsed: {(time.perf_counter() - t0) / 60:.2f} min')
     np.save(f'qtbl_mc_reward_{episodes}.npy', np.asarray(reward))
     
 #     agent.load_qtable('qtbl_e10000.npy')

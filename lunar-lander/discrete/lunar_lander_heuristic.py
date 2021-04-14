@@ -68,4 +68,5 @@ def demo_heuristic_lander(env, seed=None, render=False):
 
 if __name__ == '__main__':
     env = create_env()
-    demo_heuristic_lander(env, render=True)
+    for _ in range(5):
+        demo_heuristic_lander(env, render=True)

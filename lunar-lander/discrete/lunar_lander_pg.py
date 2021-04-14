@@ -1,24 +1,26 @@
+
+
+# https://medium.com/@gabogarza/deep-reinforcement-learning-policy-gradients-8f6df70404e6
+
+
 import gym
-import time
 import random
 import warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)  # To suppress TF warnings
-from keras import Sequential
 from collections import deque
-from keras.layers import Dense
-from keras.optimizers import Adam
-import matplotlib.pyplot as plt
-from keras.activations import relu, linear
+import tensorflow as tf
+import numpy as np
+from tensorflow.python.framework import ops
 
 import os
 import numpy as np
 
 
-class DQN:
+class PG:
 
-    """ Implementation of Deep Q-Learning algorithm """
+    """ Implementation of Policy Gradient algorithm """
 
-    def __init__(self, env, alpha=0.001, gamma=.99, epsilon=1.0, epsilon_min=.01, epsilon_max=1.0, epsilon_decay=0.996, batch_size=64, seed=0):
+    def __init__(self, env, alpha=0.01, gamma=.95, epsilon=1.0, epsilon_min=.01, epsilon_max=1.0, epsilon_decay=0.996, batch_size=64, seed=0):
         self.epsilon = epsilon
         self.gamma = gamma
         self.batch_size = batch_size
@@ -35,9 +37,13 @@ class DQN:
         self.max_steps = self.env._max_episode_steps   #1000 in LunarLander
         self.memory = deque(maxlen=1000000)
         self.model = self.build_model()
+        self.sess.run(tf.global_variables_initializer())
+        self.saver = tf.train.Saver()
 
     def remember(self, state, action, reward, next_state, done):
-        self.memory.append((state, action, reward, next_state, done))
+        action_arr = np.zeros(self.action_space)
+        action_arr[action] = 1.0
+        self.memory.append((state, action_arr, reward))
 
     def replay(self):
         if len(self.memory) < self.batch_size:
@@ -63,10 +69,16 @@ class DQN:
         #     self.epsilon *= self.epsilon_decay
 
     def act(self, state):
-        if np.random.rand() < self.epsilon:
-            return np.random.randint(self.action_space)  # Exploration
-        act_values = np.squeeze(self.model.predict(state))
-        return np.argmax(act_values)  # Exploitation
+        # Reshape observation to (num_features, 1)
+        observation = observation[:, np.newaxis]
+
+        # Run forward propagation to get softmax probabilities
+        prob_weights = self.sess.run(self.outputs_softmax, feed_dict = {self.X: observation})
+
+        # Select action using a biased sample
+        # this will return the index of the action we've sampled
+        action = np.random.choice(range(len(prob_weights.ravel())), p=prob_weights.ravel())
+        return action
 
     def train(self, episodes):
         rewards = []
@@ -103,7 +115,37 @@ class DQN:
             if not (e % 50) and e:
                 self.save_weights(f'dqn_e{e}.h5')
 
+
+
+        # Discount and normalize episode reward
+        discounted_episode_rewards_norm = self.discount_and_norm_rewards()
+
+        # Train on episode
+        self.sess.run(self.train_op, feed_dict={
+             self.X: np.vstack(self.episode_observations).T,
+             self.Y: np.vstack(np.array(self.episode_actions)).T,
+             self.discounted_episode_rewards_norm: discounted_episode_rewards_norm,
+        })
+
+        # Reset the episode data
+        self.episode_observations, self.episode_actions, self.episode_rewards  = [], [], []
+
+        return discounted_episode_rewards_norm
+
+
+
         return rewards
+
+    def discount_and_norm_rewards(self):
+        discounted_episode_rewards = np.zeros_like(self.episode_rewards)
+        cumulative = 0
+        for t in reversed(range(len(self.episode_rewards))):
+            cumulative = cumulative * self.gamma + self.episode_rewards[t]
+            discounted_episode_rewards[t] = cumulative
+
+        discounted_episode_rewards -= np.mean(discounted_episode_rewards)
+        discounted_episode_rewards /= np.std(discounted_episode_rewards)
+        return discounted_episode_rewards
 
     def evaluate(self, episodes=1, render=False):
         curr_epsilon = self.epsilon
@@ -131,25 +173,59 @@ class DQN:
         return np.clip(1.0 - np.log10((episode + 1) / (total_episodes * 0.1)), self.epsilon_min, self.epsilon_max)
 
     def build_model(self):
+        # Create placeholders
+        with tf.name_scope('inputs'):
+            self.X = tf.placeholder(tf.float32, shape=(self.n_x, None), name="X")
+            self.Y = tf.placeholder(tf.float32, shape=(self.n_y, None), name="Y")
+            self.discounted_episode_rewards_norm = tf.placeholder(tf.float32, [None, ], name="actions_value")
 
-        model = Sequential()
-        model.add(Dense(150, input_dim=self.state_space, activation=relu))
-        model.add(Dense(120, activation=relu))
-        model.add(Dense(self.action_space, activation=linear))
-        model.compile(loss='mse', optimizer=Adam(lr=self.alpha))
-        return model
+        # Initialize parameters
+        units_layer_1 = 10
+        units_layer_2 = 10
+        units_output_layer = self.n_y
+        with tf.name_scope('parameters'):
+            W1 = tf.get_variable("W1", [units_layer_1, self.n_x], initializer = tf.contrib.layers.xavier_initializer(seed=1))
+            b1 = tf.get_variable("b1", [units_layer_1, 1], initializer = tf.contrib.layers.xavier_initializer(seed=1))
+            W2 = tf.get_variable("W2", [units_layer_2, units_layer_1], initializer = tf.contrib.layers.xavier_initializer(seed=1))
+            b2 = tf.get_variable("b2", [units_layer_2, 1], initializer = tf.contrib.layers.xavier_initializer(seed=1))
+            W3 = tf.get_variable("W3", [self.n_y, units_layer_2], initializer = tf.contrib.layers.xavier_initializer(seed=1))
+            b3 = tf.get_variable("b3", [self.n_y, 1], initializer = tf.contrib.layers.xavier_initializer(seed=1))
+
+        # Forward prop
+        with tf.name_scope('layer_1'):
+            Z1 = tf.add(tf.matmul(W1,self.X), b1)
+            A1 = tf.nn.relu(Z1)
+        with tf.name_scope('layer_2'):
+            Z2 = tf.add(tf.matmul(W2, A1), b2)
+            A2 = tf.nn.relu(Z2)
+        with tf.name_scope('layer_3'):
+            Z3 = tf.add(tf.matmul(W3, A2), b3)
+            A3 = tf.nn.softmax(Z3)
+
+        # Softmax outputs, we need to transpose as tensorflow nn functions expects them in this shape
+        logits = tf.transpose(Z3)
+        labels = tf.transpose(self.Y)
+        self.outputs_softmax = tf.nn.softmax(logits, name='A3')
+
+        with tf.name_scope('loss'):
+            neg_log_prob = tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=labels)
+            loss = tf.reduce_mean(neg_log_prob * self.discounted_episode_rewards_norm)  # reward guided loss
+
+        with tf.name_scope('train'):
+            self.train_op = tf.train.AdamOptimizer(self.lr).minimize(loss)
 
     def save_weights(self, weights_fn='model_weights.h5'):
         folder = 'checkpoints'
         if not os.path.exists(folder):
             os.mkdir(folder)
-        self.model.save_weights(os.path.join(folder, weights_fn))
+        save_path = self.saver.save(self.sess, weights_fn)
         print(f'Model weights saved to : {os.path.join(folder, weights_fn)}')
 
     def load_weights(self, weights_fn):
         if weights_fn is not None:
             if os.path.isfile(weights_fn):
-                self.model.load_weights(weights_fn)
+                self.load_path = load_path
+                self.saver.restore(self.sess, self.load_path)
             else:
                 raise ValueError(f'Invalid file name specified: {weights_fn}')
 
@@ -162,11 +238,8 @@ if __name__ == '__main__':
     env = create_env()
     
     agent = DQN(env)
-    # episodes = 600  # Should be enough to satisfy env criterion (reward 200+)
-    episodes = 1000
-    t0 = time.perf_counter()
+    episodes = 600  # Should be enough to satisfy env criterion (reward 200+)
     reward = agent.train(episodes)
-    print(f'elapsed: {(time.perf_counter() - t0) / 60:.2f} min')
     np.save(f'dqn_reward_{episodes}.npy', np.asarray(reward))
 
     # # Resume training
